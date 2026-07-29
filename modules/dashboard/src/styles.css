@@ -1,0 +1,322 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Theme tokens from Figma. Dark mode: add .dark to <html>.
+   Never use dark: prefix for colors — semantic vars handle mode switching. */
+:root {
+  color-scheme: light;
+
+  /* Primitive neutral scale */
+  --color-neutral-white: #ffffff;
+  --color-neutral-50: #fafafa;
+  --color-neutral-100: #f5f5f5;
+  --color-neutral-150: #ebebeb;
+  --color-neutral-200: #e5e5e5;
+  --color-neutral-300: #d4d4d4;
+  --color-neutral-400: #a3a3a3;
+  --color-neutral-500: #737373;
+  --color-neutral-600: #525252;
+  --color-neutral-700: #404040;
+  --color-neutral-800: #262626;
+  --color-neutral-850: #1f1f1f;
+  --color-neutral-900: #171717;
+  --color-neutral-950: #0a0a0a;
+  --color-neutral-black: #000000;
+
+  /* fg */
+  --fg-primary: var(--color-neutral-950);
+  --fg-primary-inverted: var(--color-neutral-100);
+  --fg-secondary: var(--color-neutral-600);
+  --fg-secondary-hover: var(--color-neutral-black);
+  --fg-secondary-inverted: var(--color-neutral-400);
+  --fg-tertiary: var(--color-neutral-500);
+  --fg-tertiary-inverted: var(--color-neutral-600);
+  --fg-static-white: var(--color-neutral-white);
+  --fg-link: #2563eb;
+  --fg-link-hover: #3b82f6;
+  --fg-error: #dc2626;
+  --fg-warning: #d97706;
+  --fg-success: #16a34a;
+
+  /* terminal (code block chrome — deliberately constant across light/dark app theme) */
+  --bg-terminal: var(--color-neutral-850);
+  --bg-terminal-action: var(--color-neutral-800);
+  --bg-terminal-action-hover: var(--color-neutral-700);
+  --fg-terminal: var(--color-neutral-100);
+  --fg-terminal-muted: var(--color-neutral-400);
+
+  /* bg */
+  --bg-surface-main: var(--color-neutral-50);
+  --bg-surface-container: var(--color-neutral-white);
+  --bg-surface-nested: var(--color-neutral-50);
+  --bg-surface-overlay: rgba(0, 0, 0, 0.48);
+  --bg-surface-container-inverted: var(--color-neutral-900);
+  --bg-surface-nested-inverted: var(--color-neutral-850);
+  --bg-selection-container-hover: var(--color-neutral-50);
+  --bg-selection-container-active: var(--color-neutral-100);
+  --bg-action-primary: var(--color-neutral-black);
+  --bg-action-primary-hover: var(--color-neutral-850);
+  --bg-action-secondary: var(--color-neutral-100);
+  --bg-action-secondary-hover: var(--color-neutral-150);
+  --bg-action-secondary-inverted: var(--color-neutral-850);
+  --bg-action-secondary-inverted-hover: var(--color-neutral-800);
+  --bg-status-error: #ef4444;
+  --bg-status-error-hover: #dc2626;
+  --bg-status-warning: #f59e0b;
+  --bg-status-warning-hover: #d97706;
+  --bg-accent: #3b82f6;
+
+  /* border */
+  --border-default: var(--color-neutral-100);
+  --border-default-inverted: var(--color-neutral-800);
+  --border-error: #dc2626;
+  --border-warning: #d97706;
+  --border-success: #16a34a;
+  --border-divider: var(--color-neutral-100);
+  --border-divider-tint: var(--color-neutral-150);
+  --border-indicator: var(--color-neutral-300);
+
+  /* focus */
+  --focus-ring: #000000;
+  --focus-error: #dc2626;
+
+  /* shadow */
+  --shadow-1: 0 4px 24px -4px rgba(0, 0, 0, 0.16);
+  --shadow-2: 0 8px 32px -4px rgba(0, 0, 0, 0.24);
+  --shadow-3: 0 12px 48px -8px rgba(0, 0, 0, 0.24);
+
+  /* radius */
+  --radius-container: 16px;
+  --radius-nested: 12px;
+  --radius-small: 8px;
+  --radius-full: 9999px;
+
+  /* motion */
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+
+  /* shell */
+  --shell-texture: rgba(10, 10, 10, 0.032);
+  --shell-rail-veil: rgba(10, 10, 10, 0.022);
+  --selection-bg: rgba(37, 99, 235, 0.16);
+}
+
+.dark {
+  color-scheme: dark;
+
+  --fg-primary: var(--color-neutral-100);
+  --fg-primary-inverted: var(--color-neutral-950);
+  --fg-secondary: var(--color-neutral-400);
+  --fg-secondary-hover: var(--color-neutral-150);
+  --fg-secondary-inverted: var(--color-neutral-600);
+  --fg-tertiary: var(--color-neutral-600);
+  --fg-tertiary-inverted: var(--color-neutral-500);
+  --fg-link: #3b82f6;
+  --fg-link-hover: #60a5fa;
+  --fg-error: #ef4444;
+  --fg-warning: #f59e0b;
+  --fg-success: #22c55e;
+
+  --bg-surface-main: var(--color-neutral-950);
+  --bg-surface-container: var(--color-neutral-900);
+  --bg-surface-nested: var(--color-neutral-850);
+  --bg-surface-container-inverted: var(--color-neutral-white);
+  --bg-surface-nested-inverted: var(--color-neutral-50);
+  --bg-selection-container-hover: var(--color-neutral-850);
+  --bg-selection-container-active: var(--color-neutral-800);
+  --bg-action-primary: var(--color-neutral-150);
+  --bg-action-primary-hover: var(--color-neutral-200);
+  --bg-action-secondary: var(--color-neutral-800);
+  --bg-action-secondary-hover: var(--color-neutral-500);
+  --bg-action-secondary-inverted: var(--color-neutral-100);
+  --bg-action-secondary-inverted-hover: var(--color-neutral-150);
+  --bg-status-warning-hover: #fbbf24;
+
+  --border-default: var(--color-neutral-800);
+  --border-default-inverted: var(--color-neutral-150);
+  --border-error: #ef4444;
+  --border-warning: #f59e0b;
+  --border-success: #22c55e;
+  --border-divider: var(--color-neutral-800);
+  --border-divider-tint: var(--color-neutral-700);
+  --border-indicator: var(--color-neutral-400);
+
+  --focus-ring: #ffffff;
+
+  --shadow-1: 0 4px 24px -4px rgba(0, 0, 0, 0.24);
+  --shadow-2: 0 8px 32px -4px rgba(0, 0, 0, 0.48);
+  --shadow-3: 0 12px 48px -8px rgba(0, 0, 0, 0.48);
+
+  --shell-texture: rgba(255, 255, 255, 0.03);
+  --shell-rail-veil: rgba(255, 255, 255, 0.016);
+  --selection-bg: rgba(59, 130, 246, 0.28);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  font-variant-ligatures: contextual;
+  letter-spacing: -0.011em;
+  color: var(--fg-primary);
+  background-color: var(--bg-surface-main);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+code,
+kbd,
+pre,
+samp {
+  letter-spacing: 0;
+  font-variant-ligatures: none;
+}
+
+::selection {
+  background-color: var(--selection-bg);
+  color: var(--fg-primary);
+}
+
+*:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+/* Application shell */
+@layer components {
+  .skip-link {
+    position: absolute;
+    top: 0.75rem;
+    left: 0.75rem;
+    z-index: 50;
+    padding: 0.5rem 0.875rem;
+    border-radius: var(--radius-small);
+    background-color: var(--bg-action-primary);
+    color: var(--fg-primary-inverted);
+    font-size: 0.875rem;
+    font-weight: 500;
+    box-shadow: var(--shadow-2);
+    transform: translateY(calc(-100% - 1rem));
+    transition: transform 200ms var(--ease-out-quart);
+  }
+
+  .skip-link:focus {
+    transform: translateY(0);
+  }
+
+  /* Archive-aligned shell rail: 256px sticky desktop sidebar, plain container surface. */
+  .app-rail {
+    background-color: var(--bg-surface-container);
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-divider-tint) transparent;
+  }
+
+  .app-rail::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .app-rail::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .app-rail::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: var(--radius-full);
+    background-clip: padding-box;
+    background-color: var(--border-divider-tint);
+  }
+
+  .app-canvas {
+    background-color: var(--bg-surface-main);
+  }
+
+  /* Animated dot used by login hero and quickstart status strip. */
+  .dc-pulse {
+    animation: dc-pulse 2.4s ease-in-out infinite;
+  }
+
+  @keyframes dc-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+
+  .dc-fade-in {
+    animation: dc-fade 220ms ease both;
+  }
+
+  @keyframes dc-fade {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .dc-progress-fill {
+    transition: width 250ms ease;
+  }
+}
+
+.brand-logo-dark {
+  display: none;
+}
+
+.dark .brand-logo-light {
+  display: none;
+}
+
+.dark .brand-logo-dark {
+  display: block;
+}
+
+@keyframes shell-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,81 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-payment_processor}
+      POSTGRES_USER: ${POSTGRES_USER:-payment_processor}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-payment_processor_dev_only}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: ./modules/backend
+      dockerfile: Dockerfile
+    working_dir: /app
+    environment:
+      NODE_ENV: development
+      PORT: 8788
+      BASE_URL: ${BASE_URL:-http://localhost:8788}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NETWORK: ${NETWORK:-paseo-next-v2}
+      OPERATOR_MNEMONIC: ${OPERATOR_MNEMONIC:-}
+      PAYMENTS_V1_AUTH_KEY: ${PAYMENTS_V1_AUTH_KEY:-}
+      MASTER_KEY: ${MASTER_KEY:?Set MASTER_KEY in .env}
+      SIGNUP_CODE: ${SIGNUP_CODE:-}
+      SETTLEMENT_ACCOUNT_PATH: ${SETTLEMENT_ACCOUNT_PATH:-}
+      SETTLEMENT_POLL_MS: ${SETTLEMENT_POLL_MS:-20000}
+      SETTLEMENT_MAX_CLAIM_ATTEMPTS: ${SETTLEMENT_MAX_CLAIM_ATTEMPTS:-2}
+    ports:
+      - "${BACKEND_PORT:-8788}:8788"
+    volumes:
+      - ./modules/backend:/app
+      - backend-node-modules:/app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  dashboard:
+    build:
+      context: ./modules/dashboard
+      dockerfile: Dockerfile
+    working_dir: /app
+    environment:
+      NODE_ENV: development
+      VITE_API_PROXY_TARGET: http://backend:8788
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+    ports:
+      - "${DASHBOARD_PORT:-5175}:5175"
+    volumes:
+      - ./modules/dashboard:/app
+      - dashboard-node-modules:/app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  postgres-data:
+  redis-data:
+  backend-node-modules:
+  dashboard-node-modules:

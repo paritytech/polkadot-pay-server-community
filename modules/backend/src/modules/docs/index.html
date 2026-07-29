@@ -1,0 +1,1231 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Payment Processor API — Integration guide</title>
+    <meta name="description" content="Create an API key, present a server-generated payment QR, and receive signed payment updates." />
+    <style>
+      :root {
+        color-scheme: light;
+        --page: #f5f7fb;
+        --surface: #ffffff;
+        --surface-nested: #e5e7eb;
+        --text: #111827;
+        --muted: #6b7280;
+        --action: #111827;
+        --action-hover: #1f2937;
+        --code: #111827;
+        --code-text: #ffffff;
+        --divider: #e5e7eb;
+        --focus: #4b5563;
+        --radius-container: 16px;
+        --radius-nested: 12px;
+      }
+
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        background: var(--page);
+        color: var(--text);
+        font: 16px/1.6 ui-sans-serif, system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      h1, h2, h3, p { margin: 0; }
+      a { color: inherit; }
+      :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+      main:focus-visible { outline: none; }
+
+      .skip-link {
+        position: fixed;
+        top: -64px;
+        left: 16px;
+        z-index: 50;
+        background: var(--action);
+        color: var(--code-text);
+        text-decoration: none;
+        padding: 10px 18px;
+        border-radius: 999px;
+        font-size: 14px;
+        transition: top 0.15s ease;
+      }
+      .skip-link:focus { top: 16px; }
+
+      .shell { max-width: 1280px; margin: 0 auto; padding: 0 24px 64px; }
+
+      .site-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px 16px;
+        flex-wrap: wrap;
+        padding: 22px 0;
+      }
+      .brand { font-weight: 650; font-size: 15px; letter-spacing: 0.01em; }
+      .header-links { display: flex; gap: 10px; flex-wrap: wrap; }
+      .site-header .btn { padding: 8px 15px; font-size: 13.5px; }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        padding: 11px 20px;
+        font-size: 14.5px;
+        font-weight: 500;
+        text-decoration: none;
+        transition: background-color 0.15s ease;
+      }
+      .btn-primary { background: var(--action); color: var(--code-text); }
+      .btn-primary:hover { background: var(--action-hover); }
+      .btn-secondary { background: var(--surface-nested); color: var(--text); }
+      .btn-secondary:hover { background: #d1d5db; }
+
+      .hero { padding: 44px 0 0; }
+      .kicker { font-size: 12px; font-weight: 650; letter-spacing: 0.16em; color: var(--muted); }
+      .hero h1 {
+        margin-top: 16px;
+        font-family: ui-serif, Georgia, serif;
+        font-weight: 600;
+        font-size: 52px;
+        line-height: 1.08;
+        letter-spacing: -0.015em;
+        max-width: 16ch;
+      }
+      .lede { margin-top: 16px; font-size: 17px; color: var(--muted); max-width: 56ch; }
+      .hero-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 28px; }
+
+      .guide {
+        display: grid;
+        grid-template-columns: 240px minmax(0, 1fr);
+        gap: 48px;
+        align-items: start;
+        margin-top: 52px;
+      }
+
+      .step-nav { position: sticky; top: 24px; }
+      .step-nav-title {
+        margin: 0 0 12px 12px;
+        font-size: 12px;
+        font-weight: 650;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .step-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+      .step-link {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 12px;
+        border-radius: var(--radius-nested);
+        color: var(--muted);
+        font-size: 14px;
+        font-weight: 500;
+        text-decoration: none;
+        transition: background-color 0.15s ease, color 0.15s ease;
+      }
+      .step-link:hover { background: var(--surface-nested); color: var(--text); }
+      .step-link[aria-current="step"] { background: var(--action); color: var(--code-text); }
+      .step-num {
+        flex: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        border-radius: 999px;
+        background: var(--surface-nested);
+        color: var(--text);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 11.5px;
+      }
+      .step-link[aria-current="step"] .step-num { background: var(--action-hover); color: var(--code-text); }
+      .step-current { display: none; margin-top: 10px; font-size: 13.5px; color: var(--muted); }
+
+      .guide-content { display: grid; gap: 40px; min-width: 0; }
+
+      .step {
+        background: var(--surface);
+        border-radius: var(--radius-container);
+        padding: 34px 36px;
+        box-shadow: 0 12px 36px rgba(15, 23, 42, 0.08);
+        scroll-margin-top: 24px;
+        min-width: 0;
+      }
+      .step > :first-child { margin-top: 0; }
+      .eyebrow { font-size: 12px; font-weight: 650; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+      .step h2 { margin-top: 8px; font-size: 26px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.25; }
+      .step h3 { margin-top: 32px; font-size: 16.5px; font-weight: 650; }
+      .step p { margin-top: 14px; max-width: 72ch; }
+      .step a { color: var(--text); text-decoration: underline; text-underline-offset: 2px; font-weight: 500; }
+      .step p code, .step td code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.85em;
+        background: var(--surface-nested);
+        border-radius: 6px;
+        padding: 1.5px 6px;
+      }
+
+      .note {
+        margin-top: 16px;
+        background: var(--page);
+        border-radius: var(--radius-nested);
+        padding: 14px 18px;
+        font-size: 14.5px;
+      }
+
+      .step table { width: 100%; border-collapse: collapse; margin-top: 18px; font-size: 14.5px; }
+      .step th {
+        text-align: left;
+        font-size: 12px;
+        font-weight: 650;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+        padding: 0 16px 10px 0;
+        border-bottom: 1px solid var(--divider);
+      }
+      .step td { text-align: left; vertical-align: top; padding: 11px 16px 11px 0; border-bottom: 1px solid var(--divider); }
+      .step td:first-child { white-space: nowrap; }
+
+      .sample { margin-top: 18px; background: var(--code); border-radius: var(--radius-nested); overflow: hidden; }
+      .sample-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 10px 0 18px; }
+      .sample-label { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: #9ca3af; overflow-wrap: anywhere; }
+      .copy {
+        flex: none;
+        font: inherit;
+        font-size: 12.5px;
+        font-weight: 500;
+        border: 0;
+        cursor: pointer;
+        padding: 6px 14px;
+        border-radius: 999px;
+        background: var(--action-hover);
+        color: var(--code-text);
+        transition: background-color 0.15s ease;
+      }
+      .copy:hover { background: #374151; }
+      .copy:focus-visible { outline-color: var(--code-text); }
+      .sample pre { margin: 0; padding: 12px 18px 18px; overflow-x: auto; }
+      .sample code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 13px;
+        line-height: 1.6;
+        color: var(--code-text);
+      }
+      .sample code .token { font-weight: 450; }
+      .sample code .token-text { color: var(--code-text); }
+      .sample code .token-key { color: #93c5fd; }
+      .sample code .token-string { color: #86efac; }
+      .sample code .token-number { color: #fbbf24; }
+      .sample code .token-literal { color: #f0abfc; }
+      .sample code .token-punctuation { color: #cbd5e1; }
+      .sample code .token-command { color: #67e8f9; font-weight: 650; }
+      .sample code .token-flag { color: #c4b5fd; }
+      .sample code .token-variable { color: #f9a8d4; }
+      .sample code .token-comment { color: #94a3b8; font-style: italic; }
+      .sample code .token-keyword { color: #c4b5fd; }
+
+      .finish {
+        margin-top: 36px;
+        background: var(--action);
+        color: var(--code-text);
+        border-radius: var(--radius-container);
+        padding: 28px 30px;
+      }
+      .finish h3 { margin-top: 0; font-size: 20px; font-weight: 650; }
+      .finish p { margin-top: 12px; color: #d1d5db; max-width: 75ch; }
+
+      .copy-status {
+        position: fixed;
+        left: 50%;
+        bottom: 20px;
+        transform: translateX(-50%);
+        z-index: 40;
+        background: var(--code);
+        color: var(--code-text);
+        font-size: 13.5px;
+        padding: 9px 18px;
+        border-radius: 999px;
+        box-shadow: 0 12px 36px rgba(15, 23, 42, 0.24);
+        max-width: calc(100vw - 32px);
+      }
+      .copy-status:empty { display: none; }
+
+      .site-footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--divider); color: var(--muted); font-size: 13.5px; }
+      .site-footer p { margin: 0; }
+      .site-footer a { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
+
+      @media (max-width: 800px) {
+        .shell { padding: 0 16px 48px; }
+        .hero { padding-top: 28px; }
+        .hero h1 { font-size: 34px; }
+        .lede { font-size: 16px; }
+        .guide { grid-template-columns: 1fr; gap: 24px; margin-top: 44px; }
+        .guide-content { gap: 24px; }
+        .step-nav { position: static; }
+        .step-nav-title { display: none; }
+        .step-list { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+        .step-link {
+          justify-content: center;
+          padding: 10px 4px;
+          background: var(--surface);
+          box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+        }
+        .step-title {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          padding: 0;
+          margin: -1px;
+          overflow: hidden;
+          clip: rect(0 0 0 0);
+          white-space: nowrap;
+          border: 0;
+        }
+        .step-num { width: auto; height: auto; background: none; color: inherit; font-family: inherit; font-size: 15px; font-weight: 600; }
+        .step-link[aria-current="step"] .step-num { background: none; }
+        .step-current { display: block; }
+        .step { padding: 24px 20px; }
+        .step h2 { font-size: 22px; }
+        .finish { padding: 24px 20px; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+        *, *::before, *::after { transition: none !important; animation: none !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <div class="shell">
+      <header class="site-header">
+        <p class="brand">Payment Processor</p>
+        <div class="header-links">
+          <a class="btn btn-secondary" href="/docs/reference">Browse API reference</a>
+          <a class="btn btn-primary" href="/dashboard">Open dashboard</a>
+        </div>
+      </header>
+
+      <main id="main-content" tabindex="-1">
+        <section class="hero" aria-labelledby="hero-title">
+          <p class="kicker">PAYMENT PROCESSOR API</p>
+          <h1 id="hero-title">Accept your first payment</h1>
+          <p class="lede">Create an API key, present a server-generated payment QR, and receive signed payment updates.</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="/dashboard">Open dashboard</a>
+            <a class="btn btn-secondary" href="/docs/reference">Browse API reference</a>
+          </div>
+        </section>
+
+        <div class="guide">
+          <nav class="step-nav" aria-labelledby="step-nav-title">
+            <p class="step-nav-title" id="step-nav-title">Integration steps</p>
+            <ol class="step-list">
+              <li>
+                <a class="step-link" href="#create-an-api-key" aria-current="step">
+                  <span class="step-num" aria-hidden="true">1</span>
+                  <span class="step-title">Create an API key</span>
+                </a>
+              </li>
+              <li>
+                <a class="step-link" href="#register-a-webhook">
+                  <span class="step-num" aria-hidden="true">2</span>
+                  <span class="step-title">Register a webhook</span>
+                </a>
+              </li>
+              <li>
+                <a class="step-link" href="#create-a-payment-qr">
+                  <span class="step-num" aria-hidden="true">3</span>
+                  <span class="step-title">Create a payment QR</span>
+                </a>
+              </li>
+              <li>
+                <a class="step-link" href="#subscribe-to-events">
+                  <span class="step-num" aria-hidden="true">4</span>
+                  <span class="step-title">Subscribe to events</span>
+                </a>
+              </li>
+            </ol>
+            <p class="step-current" id="step-current">Step 1 of 4: Create an API key</p>
+          </nav>
+
+          <div class="guide-content">
+            <section class="step" id="create-an-api-key">
+              <p class="eyebrow">Step 1</p>
+              <h2>Create an API key</h2>
+              <p>
+                Every API request is authenticated with a bearer key. If this is your first time here, open the
+                <a href="/dashboard">dashboard</a> at <code>GET /dashboard</code> and submit the signup form: it calls
+                <code>POST /v1/accounts</code>, saves the returned <code>payment_processor_sk_…</code> key in <code>sessionStorage</code>,
+                signs you in, and reveals the secret once.
+              </p>
+              <p>
+                There is no username/password login. Returning integrators sign in by pasting an existing API key into the
+                dashboard’s session form.
+              </p>
+
+              <h3>Point your shell at the API</h3>
+              <div class="sample">
+                <div class="sample-head">
+                  <span class="sample-label">Terminal</span>
+                  <button type="button" class="copy" data-copy>Copy</button>
+                </div>
+                <pre><code>export PAYMENT_PROCESSOR_API_URL="&lt;current docs origin&gt;"
+export PAYMENT_PROCESSOR_API_KEY="payment_processor_sk_..."</code></pre>
+              </div>
+              <p class="note">
+                This page filled <code>PAYMENT_PROCESSOR_API_URL</code> with its own origin, so copied commands run against the host serving
+                these docs. Replace <code>payment_processor_sk_...</code> with the key from your dashboard — this page never asks for, or
+                stores, your secrets.
+              </p>
+
+              <h3>Create another key over the API</h3>
+              <p>
+                Once you hold an active key, mint additional keys with <code>POST /v1/api_keys</code> — for example one key per
+                environment. It requires an existing active key, so the dashboard remains the recommended path for your first
+                key.
+              </p>
+              <div class="sample">
+                <div class="sample-head">
+                  <span class="sample-label">Request — POST /v1/api_keys</span>
+                  <button type="button" class="copy" data-copy>Copy</button>
+                </div>
+                <pre><code>curl -X POST "$PAYMENT_PROCESSOR_API_URL/v1/api_keys" \
+  -H "Authorization: Bearer $PAYMENT_PROCESSOR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"label":"Production"}'</code></pre>
+              </div>
+              <div class="sample">
+                <div class="sample-head">
+                  <span class="sample-label">Response — 201 Created</span>
+                  <button type="button" class="copy" data-copy>Copy</button>
+                </div>
+                <pre><code data-example="api-key-response">{
+  "id": "key_01K0PAYMENTPROCESSOR0000000000000000",
+  "object": "api_key",
+  "label": "Production",
+  "last4": "X7q9",
+  "created_at": "2026-07-20T12:00:00.000Z",
+  "revoked_at": null,
+  "secret": "payment_processor_sk_..."
+}</code></pre>
+              </div>
+              <p class="note">
+                <code>secret</code> is returned once, in this response only. Store it now — every later read of this key
+                exposes only <code>last4</code>.
+              </p>
+            </section>
+
+            <section class="step" id="register-a-webhook">
+              <p class="eyebrow">Step 2</p>
+              <h2>Register a webhook</h2>
+              <p>
+                Payment Processor delivers payment updates by signing and POSTing events to your endpoint. Register an endpoint with the
+                event types it should receive:
+              </p>
+              <div class="sample">
+                <div class="sample-head">
+                  <span class="sample-label">Request — POST /v1/webhook_endpoints</span>
+                  <button type="button" class="copy" data-copy>Copy</button>
+                </div>
+                <pre><code>curl -X POST "$PAYMENT_PROCESSOR_API_URL/v1/webhook_endpoints" \
+  -H "Authorization: Bearer $PAYMENT_PROCESSOR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '<span data-example="webhook-request">{
+  "url": "https://merchant.example/webhooks/payment-processor",
+  "events": ["payment.created", "payment.received", "payment.settling", "payment.confirming", "payment.settled", "payment.failed", "payment.expired", "payment.canceled", "test.ping"]
+}</span>'</code></pre>
+              </div>
+              <p>
+                The <code>events</code> array is the subscription mechanism: it selects exactly which event types this endpoint
+                receives. Omit it to subscribe to everything (the default is <code>["*"]</code>); an empty array is rejected,
+                and only HTTP(S) URLs are accepted. The full event-type table, delivery history, and replay live in
+                <a href="#subscribe-to-events">Subscribe to events</a>.
+              </p>
+              <div class="sample">
+                <div class="sample-head">
+                  <span class="sample-label">Response — 201 Created</span>
+                  <button type="button" class="copy" data-copy>Copy</button>
+                </div>
+                <pre><code data-example="webhook-response">{
+  "id": "we_01K0PAYMENTPROCESSOR0000000000000000",
+  "object": "webhook_endpoint",
+  "url": "https://merchant.example/webhooks/payment-processor",
+  "events": ["payment.created", "payment.received", "payment.settling", "payment.confirming", "payment.settled", "payment.failed", "payment.expired", "payment.canceled", "test.ping"],
+  "status": "enabled",
+  "created_at": "2026-07-20T12:00:00.000Z",
+  "secret": "whsec_..."
+}</code></pre>
+              </div>
+              <p class="note">
+                The <code>whsec_…</code> secret is shown only on creation or rotation — store it like a password.
+                <code>test.ping</code> is subscribed above so this guide’s final check creates a delivery for this endpoint; an
+                endpoint subscribed only to payment event types still records the test event in the log but does not receive
+                it.
+              </p>
+              <p>
+                One representative failure — sending <code>"events": []</code> returns HTTP 400. Every other status and error
+                contract is in the <a href="/docs/reference">API reference</a>.
+              </p>
+              <div class="sample">
+                <div class="sample-head">
+                  <span class="sample-label">Response — 400 Bad Request</span>
+                  <button type="button" class="copy" data-copy>Copy</button>
+                </div>
+                <pre><code data-example="invalid-events-error">{
+  "error": {
+    "type": "invalid_request_error",
+    "code": "invalid_events",
+    "message": "At least one event must be selected.",
+    "param": "events"
+  }
+}</code></pre>
+              </div>
+
+              <h3>What a delivery looks like</h3>
+              <p>Each delivery is an HTTP POST with three headers:</p>
+              <div class="sample">
+                <div class="sample-head">
+                  <span class="sample-label">Delivery headers</span>
+                  <button type="button" class="copy" data-copy>Copy</button>
+                </div>
+                <pre><code>content-type: application/json
+payment-processor-signature: t=&lt;unix-seconds&gt;,v1=&lt;hmac-hex&gt;
+payment-processor-event-id: &lt;event-id&gt;</code></pre>
+              </div>
+              <h3>Verify signatures before parsing</h3>
+              <p>
+                The receiver below runs on Node 22 (ESM) with Express 5. It reads the exact raw body, accepts only a
+                well-formed <code>payment-processor-signature</code> header, rejects timestamps skewed more than 300 seconds, compares
+                digests in constant time, and only then parses JSON.
+              </p>
+              <div class="sample">
+                <div class="sample-head">
+                  <span class="sample-label">Terminal</span>
+                  <button type="button" class="copy" data-copy>Copy</button>
+                </div>
+                <pre><code>npm install express
+export PAYMENT_PROCESSOR_WEBHOOK_SECRET=whsec_... node server.mjs</code></pre>
+              </div>
+              <div class="sample">
+                <div class="sample-head">
+                  <span class="sample-label">server.mjs</span>
+                  <button type="button" class="copy" data-copy>Copy</button>
+                </div>
+                <pre><code>// server.mjs — webhook receiver for Node 22 (ESM) + Express 5.
+import { createHmac, timingSafeEqual } from "node:crypto";
+import express from "express";
+
+const secret = process.env.PAYMENT_PROCESSOR_WEBHOOK_SECRET;
+if (!secret) throw new Error("Set PAYMENT_PROCESSOR_WEBHOOK_SECRET=whsec_... before starting.");
+const app = express();
+const MAX_SKEW_SECONDS = 300;
+const SIGNATURE = /^t=([0-9]+),v1=([0-9a-f]{64})$/;
+
+// Require the exact `t=<unix-seconds>,v1=<hex-HMAC>` header format before parsing:
+app.post("/webhooks/payment-processor", express.raw({ type: "application/json" }), (req, res) =&gt; {
+  const header = req.headers["payment-processor-signature"];
+  const match = typeof header === "string" ? SIGNATURE.exec(header) : null;
+  if (!match) return res.status(400).send("bad signature header");
+  if (!Buffer.isBuffer(req.body)) return res.status(400).send("unexpected body");
+
+  const [, timestamp, theirHex] = match;
+  if (Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp)) &gt; MAX_SKEW_SECONDS) {
+    return res.status(400).send("timestamp out of tolerance");
+  }
+
+  // HMAC-SHA256(secret, "&lt;timestamp&gt;.&lt;raw body&gt;"), hex-decoded and
+  // compared as equal-length buffers in constant time.
+  const expected = createHmac("sha256", secret).update(`${timestamp}.`).update(req.body).digest();
+  const received = Buffer.from(theirHex, "hex");
+  if (expected.length !== received.length || !timingSafeEqual(expected, received)) {
+    return res.status(400).send("signature mismatch");
+  }
+
+  let event;
+  try {
+    event = JSON.parse(req.body.toString("utf8"));
+  } catch {
+    return res.status(400).send("invalid JSON");
+  }
+
+  try {
+    if (event.type === "payment.received") {
+      // Replace with your fulfillment logic.
+      console.log(`Payment received: ${event.data.object.id}`);
+    }
+    // Acknowledge every verified event type; unhandled branches must not retry.
+    return res.status(204).end();
+  } catch (error) {
+    console.error("webhook handler failed", error);
+    return res.status(500).end(); // Payment Processor retries this delivery
+  }
+});
+
+app.listen(3000);</code></pre>
+              </div>
+
+              <h3>Confirm the endpoint works</h3>
+              <p>
+                <code>POST /v1/webhook_endpoints/{id}/test</code> queues a <code>test.ping</code> delivery at any time — the
+                observable check that your receiver verifies and acknowledges deliveries. Endpoint update, secret rotation, and
+                deletion are covered in the <a href="/docs/reference">API reference</a>.
+              </p>
+              <div class="sample">
+                <div class="sample-head">
+                  <span class="sample-label">Request — POST /v1/webhook_endpoints/{id}/test</span>
+                  <button type="button" class="copy" data-copy>Copy</button>
+                </div>
+                <pre><code>curl -X POST "$PAYMENT_PROCESSOR_API_URL/v1/webhook_endpoints/we_01K0PAYMENTPROCESSOR000000000000000/test" \
+  -H "Authorization: Bearer $PAYMENT_PROCESSOR_API_KEY"</code></pre>
+              </div>
+            </section>
+
+            <section class="step" id="create-a-payment-qr">
+              <p class="eyebrow">Step 3</p>
+              <h2>Create a payment QR</h2>
+              <p>
+                Create a payment intent from your server, then present the returned QR to the customer. Send the optional
+                <code>Idempotency-Key</code> header so a retried request returns the original payment instead of creating a
+                duplicate.
+              </p>
+              <div class="sample">
+                <div class="sample-head">
+                  <span class="sample-label">Request — POST /v1/payments</span>
+                  <button type="button" class="copy" data-copy>Copy</button>
+                </div>
+                <pre><code>curl -X POST "$PAYMENT_PROCESSOR_API_URL/v1/payments" \
+  -H "Authorization: Bearer $PAYMENT_PROCESSOR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: order-1234" \
+  -d '<span data-example="payment-request">{
+  "amount": "12.50",
+  "currency": "CASH",
+  "description": "Order #1234",
+  "reference": "ord_1234",
+  "metadata": { "order_id": "ord_1234" },
+  "display_name": "Acme Store",
+  "expires_in": 900
+}</span>'</code></pre>
+              </div>
+
+              <h3>Request parameters</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Field</th>
+                    <th scope="col">Rules</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>amount</code></td>
+                    <td>
+                      Required string, trimmed before validation. Unsigned decimal digits with an optional decimal point and
+                      one or two fractional digits — signs, exponent notation, and more than two fractional digits are
+                      rejected, never rounded. Accepted values render as <code>Number(amount).toFixed(2)</code>, so
+                      <code>"12"</code> becomes <code>"12.00"</code>. Must be greater than zero and at most
+                      <code>10000.00</code>.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>currency</code></td>
+                    <td>Required. <code>CASH</code> is the only accepted value.</td>
+                  </tr>
+                  <tr>
+                    <td><code>description</code></td>
+                    <td>Optional, at most 500 characters.</td>
+                  </tr>
+                  <tr>
+                    <td><code>reference</code></td>
+                    <td>Optional, at most 500 characters.</td>
+                  </tr>
+                  <tr>
+                    <td><code>metadata</code></td>
+                    <td>
+                      Optional object, serialized with <code>JSON.stringify</code>; the serialized UTF-8 byte length must not
+                      exceed 4,096.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>display_name</code></td>
+                    <td>Optional, at most 120 characters.</td>
+                  </tr>
+                  <tr>
+                    <td><code>expires_in</code></td>
+                    <td>Optional integer seconds. Defaults to 900; must be an integer from 60 through 86,400.</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h3>The pending payment</h3>
+              <p>A created payment answers with HTTP 201 and every field below.</p>
+              <div class="sample">
+                <div class="sample-head">
+                  <span class="sample-label">Response — 201 Created</span>
+                  <button type="button" class="copy" data-copy>Copy</button>
+                </div>
+                <pre><code data-example="payment-response">{
+  "id": "pay01K0PAYMENTPROCESSOR0000000000000000",
+  "object": "payment",
+  "status": "pending",
+  "amount": "12.50",
+  "currency": "CASH",
+  "description": "Order #1234",
+  "reference": "ord_1234",
+  "metadata": { "order_id": "ord_1234" },
+  "display_name": "Acme Store",
+  "payment_url": "https://api.example.com/pay/pay01K0PAYMENTPROCESSOR0000000000000000",
+  "qr": {
+    "deeplink": "polkadotapp://pay/cheque?id=pay01K0PAYMENTPROCESSOR0000000000000000&amp;amount=12.50&amp;key=PUBLIC_KEY&amp;name=Acme%20Store",
+    "png": "https://api.example.com/public/payments/pay01K0PAYMENTPROCESSOR0000000000000000/qr.png",
+    "svg": "https://api.example.com/public/payments/pay01K0PAYMENTPROCESSOR0000000000000000/qr.svg"
+  },
+  "settlement": {
+    "version": 1,
+    "claim_tx_hash": null,
+    "claim_tx_hashes": [],
+    "claim_last_error": null,
+    "claim_attempts": 0,
+    "claim_max_attempts": 5,
+    "claimed_at": null
+  },
+  "paid": null,
+  "created_at": "2026-07-20T12:00:00.000Z",
+  "expires_at": "2026-07-20T12:15:00.000Z",
+  "received_at": null,
+  "completed_at": null,
+  "canceled_at": null
+}</code></pre>
+              </div>
+              <p class="note">
+                Present <code>payment_url</code> as a hosted checkout link, or embed the server-rendered <code>qr.svg</code> /
+                <code>qr.png</code> directly. <code>qr.deeplink</code> opens the wallet app. Always render these returned
+                assets — do not regenerate the deeplink or draw your own QR client-side.
+              </p>
+
+              <h3>Show the QR at checkout</h3>
+              <div class="sample">
+                <div class="sample-head">
+                  <span class="sample-label">Checkout page</span>
+                  <button type="button" class="copy" data-copy>Copy</button>
+                </div>
+                <pre><code>&lt;img id="payment-qr" width="240" height="240" alt="" /&gt;
+&lt;script type="module"&gt;
+  // `payment` is the JSON your server received from POST /v1/payments.
+  const qrImage = document.querySelector("#payment-qr");
+  qrImage.src = payment.qr.svg;
+  qrImage.alt = `Scan to pay ${payment.amount} ${payment.currency}`;
+&lt;/script&gt;</code></pre>
+              </div>
+              <p>
+                While checkout is open, poll the public status endpoint — it needs no <code>Authorization</code> header:
+              </p>
+              <div class="sample">
+                <div class="sample-head">
+                  <span class="sample-label">Request — GET /public/payments/{id}/status</span>
+                  <button type="button" class="copy" data-copy>Copy</button>
+                </div>
+                <pre><code>curl "$PAYMENT_PROCESSOR_API_URL/public/payments/pay01K0PAYMENTPROCESSOR0000000000000000/status"</code></pre>
+              </div>
+            </section>
+
+            <section class="step" id="subscribe-to-events">
+              <p class="eyebrow">Step 4</p>
+              <h2>Subscribe to events</h2>
+              <p>
+                Your subscription is the <code>events</code> array you configured in
+                <a href="#register-a-webhook">Register a webhook</a>: each endpoint receives exactly the event types it lists,
+                and <code>"*"</code> selects every supported type. There is no SSE or WebSocket stream — updates arrive as
+                signed webhook deliveries, and <code>GET /v1/events</code> is the authenticated log of everything that was
+                emitted.
+              </p>
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Event</th>
+                    <th scope="col">What to do</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>payment.created</code></td>
+                    <td>Show the QR or deeplink to the payer; no funds have moved yet.</td>
+                  </tr>
+                  <tr>
+                    <td><code>payment.received</code></td>
+                    <td>Fulfill the order once the signature is verified.</td>
+                  </tr>
+                  <tr>
+                    <td><code>payment.settling</code></td>
+                    <td>Await settlement; do not treat as complete until payment.settled arrives.</td>
+                  </tr>
+                  <tr>
+                    <td><code>payment.confirming</code></td>
+                    <td>Every coin transfer for the payment is in a block; funds are not final until payment.settled.</td>
+                  </tr>
+                  <tr>
+                    <td><code>payment.settled</code></td>
+                    <td>Mark funds fully received; settlement.claim_tx_hashes is on the payment object.</td>
+                  </tr>
+                  <tr>
+                    <td><code>payment.failed</code></td>
+                    <td>Cancel or retry the order; claim_last_error explains the failure.</td>
+                  </tr>
+                  <tr>
+                    <td><code>payment.expired</code></td>
+                    <td>Stop presenting or accepting the checkout.</td>
+                  </tr>
+                  <tr>
+                    <td><code>payment.canceled</code></td>
+                    <td>Release any reserved order state.</td>
+                  </tr>
+                  <tr>
+                    <td><code>test.ping</code></td>
+                    <td>Verify endpoint connectivity; do not treat it as a payment.</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h3>Inspect history and replay deliveries</h3>
+              <div class="sample">
+                <div class="sample-head">
+                  <span class="sample-label">Terminal</span>
+                  <button type="button" class="copy" data-copy>Copy</button>
+                </div>
+                <pre><code>curl "$PAYMENT_PROCESSOR_API_URL/v1/events?type=payment.received&amp;limit=25" \
+  -H "Authorization: Bearer $PAYMENT_PROCESSOR_API_KEY"
+
+curl -X POST "$PAYMENT_PROCESSOR_API_URL/v1/events/evt_01K0PAYMENTPROCESSOR0000000000000000/resend" \
+  -H "Authorization: Bearer $PAYMENT_PROCESSOR_API_KEY"</code></pre>
+              </div>
+              <p>
+                When <code>has_more</code> is true, take the <code>id</code> of the last item in <code>data</code> and pass it
+                as <code>starting_after</code> on the next <code>GET /v1/events</code> call. <code>limit</code> accepts 1–100
+                and defaults to 25.
+              </p>
+              <p>Each event in the authenticated log carries a <code>deliveries</code> array — one entry per subscribed endpoint:</p>
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Field</th>
+                    <th scope="col">Meaning</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>endpoint_id</code></td>
+                    <td>The webhook endpoint this delivery targets.</td>
+                  </tr>
+                  <tr>
+                    <td><code>status</code></td>
+                    <td><code>pending</code>, <code>succeeded</code>, or <code>failed</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>attempt_count</code></td>
+                    <td>Delivery attempts made so far.</td>
+                  </tr>
+                  <tr>
+                    <td><code>last_status_code</code></td>
+                    <td>HTTP status of the most recent attempt; null until a response is received.</td>
+                  </tr>
+                  <tr>
+                    <td><code>last_error</code></td>
+                    <td>Failure detail from the most recent attempt; null after success.</td>
+                  </tr>
+                  <tr>
+                    <td><code>delivered_at</code></td>
+                    <td>When a 2xx response completed the delivery; null otherwise.</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p>
+                <code>POST /v1/events/{id}/resend</code> answers HTTP 202 with the same event envelope plus newly queued
+                pending deliveries. Replaying an event that is missing — or that belongs to another merchant — returns
+                <code>event_not_found</code> with HTTP 404.
+              </p>
+
+              <h3>Delivery retries</h3>
+              <p>
+                Every delivery gets seven total attempts: the initial POST is due immediately, and failures retry after 30s,
+                2m, 10m, 1h, 6h, and 24h. Any HTTP 2xx completes the delivery; a non-2xx response or the 10-second request
+                timeout sends the attempt into that retry schedule.
+              </p>
+
+              <h3>What your receiver is handed</h3>
+              <div class="sample">
+                <div class="sample-head">
+                  <span class="sample-label">Webhook payload — relevant fields</span>
+                  <button type="button" class="copy" data-copy>Copy</button>
+                </div>
+                <pre><code>{
+  "id": "evt_01K0PAYMENTPROCESSOR0000000000000000",
+  "object": "event",
+  "type": "payment.received",
+  "created_at": "2026-07-20T12:01:00.000Z",
+  "data": {
+    "object": {
+      "id": "pay01K0PAYMENTPROCESSOR0000000000000000",
+      "object": "payment",
+      "status": "received",
+      "amount": "12.50",
+      "currency": "CASH"
+    }
+  }
+}</code></pre>
+              </div>
+              <p>
+                This example is an excerpt: <code>data.object</code> is the complete Payment object documented in step 3, and
+                the authenticated event-log response additionally contains <code>deliveries</code>.
+              </p>
+
+              <div class="finish">
+                <h3>Your integration loop is ready.</h3>
+                <p>Send test.ping from the dashboard or POST /v1/webhook_endpoints/{id}/test, return a 2xx response from your handler, then confirm the event appears in GET /v1/events?type=test.ping.</p>
+              </div>
+            </section>
+          </div>
+        </div>
+      </main>
+
+      <footer class="site-footer">
+        <p>Payment Processor API · <a href="/docs/reference">API reference</a> · <a href="/dashboard">Dashboard</a></p>
+      </footer>
+    </div>
+
+    <div id="copy-status" class="copy-status" role="status" aria-live="polite"></div>
+
+    <script>
+      (() => {
+        "use strict";
+        const origin = window.location.origin;
+
+        // Fill shell examples and example URLs with this page's origin.
+        // Text nodes only, so nested data-example spans stay intact.
+        for (const code of document.querySelectorAll("pre code")) {
+          const walker = document.createTreeWalker(code, NodeFilter.SHOW_TEXT);
+          let node;
+          while ((node = walker.nextNode())) {
+            const replaced = node.nodeValue
+              .replaceAll("<current docs origin>", origin)
+              .replaceAll("https://api.example.com", origin);
+            if (replaced !== node.nodeValue) node.nodeValue = replaced;
+          }
+        }
+
+        const appendToken = (parent, kind, value) => {
+          if (!value) return;
+          const span = document.createElement("span");
+          span.className = `token token-${kind}`;
+          span.textContent = value;
+          parent.append(span);
+        };
+
+        const renderJson = (source) => {
+          const fragment = document.createDocumentFragment();
+          const numberPattern = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/;
+          const literalPattern = /^(?:true|false|null)\b/;
+          let index = 0;
+
+          while (index < source.length) {
+            const character = source[index];
+            if (/\s/.test(character)) {
+              const start = index;
+              while (index < source.length && /\s/.test(source[index])) index += 1;
+              appendToken(fragment, "text", source.slice(start, index));
+              continue;
+            }
+            if (character === '"') {
+              const start = index;
+              index += 1;
+              while (index < source.length) {
+                if (source[index] === "\\") {
+                  index += 2;
+                  continue;
+                }
+                if (source[index] === '"') {
+                  index += 1;
+                  break;
+                }
+                index += 1;
+              }
+              let lookahead = index;
+              while (lookahead < source.length && /\s/.test(source[lookahead])) lookahead += 1;
+              appendToken(fragment, lookahead < source.length && source[lookahead] === ":" ? "key" : "string", source.slice(start, index));
+              continue;
+            }
+            const number = source.slice(index).match(numberPattern);
+            if (number) {
+              appendToken(fragment, "number", number[0]);
+              index += number[0].length;
+              continue;
+            }
+            const literal = source.slice(index).match(literalPattern);
+            if (literal) {
+              appendToken(fragment, "literal", literal[0]);
+              index += literal[0].length;
+              continue;
+            }
+            if ("{}[],:".includes(character)) {
+              appendToken(fragment, "punctuation", character);
+              index += 1;
+              continue;
+            }
+            const start = index;
+            index += 1;
+            while (index < source.length && !/[\s"{}[\],:]/.test(source[index])) index += 1;
+            appendToken(fragment, "text", source.slice(start, index));
+          }
+          return fragment;
+        };
+
+        const findQuotedEnd = (source, start, quote) => {
+          let index = start + 1;
+          while (index < source.length) {
+            if (source[index] === "\\" && quote !== "'") {
+              index += 2;
+              continue;
+            }
+            if (source[index] === quote) return index + 1;
+            index += 1;
+          }
+          return source.length;
+        };
+
+        const renderShellString = (fragment, raw, quote) => {
+          appendToken(fragment, "string", quote);
+          const body = raw.slice(1, -1);
+          const variablePattern = /\$(?:\{[A-Za-z_][\w]*\}|[A-Za-z_][\w]*)/g;
+          let cursor = 0;
+          let match;
+          while ((match = variablePattern.exec(body))) {
+            appendToken(fragment, "string", body.slice(cursor, match.index));
+            appendToken(fragment, "variable", match[0]);
+            cursor = match.index + match[0].length;
+          }
+          appendToken(fragment, "string", body.slice(cursor));
+          appendToken(fragment, "string", quote);
+        };
+
+        const renderShell = (source) => {
+          const fragment = document.createDocumentFragment();
+          let index = 0;
+          let commandExpected = true;
+
+          while (index < source.length) {
+            const character = source[index];
+            if (character === "\n") {
+              appendToken(fragment, "text", character);
+              index += 1;
+              commandExpected = true;
+              continue;
+            }
+            if (/\s/.test(character)) {
+              const start = index;
+              while (index < source.length && /\s/.test(source[index]) && source[index] !== "\n") index += 1;
+              appendToken(fragment, "text", source.slice(start, index));
+              continue;
+            }
+            if (character === "#") {
+              const start = index;
+              while (index < source.length && source[index] !== "\n") index += 1;
+              appendToken(fragment, "comment", source.slice(start, index));
+              continue;
+            }
+            if (character === "'" || character === '"') {
+              const end = findQuotedEnd(source, index, character);
+              const raw = source.slice(index, end);
+              const body = raw.slice(1, -1);
+              if (/^\s*[\[{]/.test(body)) {
+                appendToken(fragment, "string", character);
+                fragment.append(renderJson(body));
+                appendToken(fragment, "string", character);
+              } else {
+                renderShellString(fragment, raw, character);
+              }
+              index = end;
+              commandExpected = false;
+              continue;
+            }
+            if (character === "$" && /(?:\{|[A-Za-z_])/.test(source[index + 1] || "")) {
+              const variable = source.slice(index).match(/^\$(?:\{[A-Za-z_][\w]*\}|[A-Za-z_][\w]*)/)[0];
+              appendToken(fragment, "variable", variable);
+              index += variable.length;
+              commandExpected = false;
+              continue;
+            }
+            if (character === "-" && /[A-Za-z]/.test(source[index + 1] || "")) {
+              const flag = source.slice(index).match(/^-{1,2}[^\s\\]+/)[0];
+              appendToken(fragment, "flag", flag);
+              index += flag.length;
+              commandExpected = false;
+              continue;
+            }
+            const start = index;
+            while (index < source.length && !/[\s'"$#-]/.test(source[index])) index += 1;
+            if (start === index) {
+              appendToken(fragment, "text", source[index]);
+              index += 1;
+              commandExpected = false;
+              continue;
+            }
+            const word = source.slice(start, index);
+            appendToken(fragment, commandExpected ? "command" : "text", word);
+            commandExpected = false;
+          }
+          return fragment;
+        };
+
+        const renderGeneric = (source) => {
+          const fragment = document.createDocumentFragment();
+          const keywords = new Set(["const", "import", "from", "if", "return", "throw", "try", "catch", "new", "let", "await", "async", "function"]);
+          let index = 0;
+          while (index < source.length) {
+            if (source.startsWith("//", index)) {
+              const start = index;
+              while (index < source.length && source[index] !== "\n") index += 1;
+              appendToken(fragment, "comment", source.slice(start, index));
+              continue;
+            }
+            if (source.startsWith("/*", index)) {
+              const end = source.indexOf("*/", index + 2);
+              const next = end === -1 ? source.length : end + 2;
+              appendToken(fragment, "comment", source.slice(index, next));
+              index = next;
+              continue;
+            }
+            const character = source[index];
+            if (character === '"' || character === "'" || character === "`") {
+              const end = findQuotedEnd(source, index, character);
+              renderShellString(fragment, source.slice(index, end), character);
+              index = end;
+              continue;
+            }
+            if (character === "$" && /(?:\{|[A-Za-z_])/.test(source[index + 1] || "")) {
+              const variable = source.slice(index).match(/^\$(?:\{[A-Za-z_][\w]*\}|[A-Za-z_][\w]*)/)[0];
+              appendToken(fragment, "variable", variable);
+              index += variable.length;
+              continue;
+            }
+            const number = source.slice(index).match(/^\b\d+(?:\.\d+)?\b/);
+            if (number) {
+              appendToken(fragment, "number", number[0]);
+              index += number[0].length;
+              continue;
+            }
+            if (/[A-Za-z_$]/.test(character)) {
+              const word = source.slice(index).match(/^[A-Za-z_$][\w$]*/)[0];
+              appendToken(fragment, keywords.has(word) ? "keyword" : "text", word);
+              index += word.length;
+              continue;
+            }
+            if (/\s/.test(character)) {
+              const start = index;
+              while (index < source.length && /\s/.test(source[index])) index += 1;
+              appendToken(fragment, "text", source.slice(start, index));
+              continue;
+            }
+            appendToken(fragment, /[{}[\]();,.:=<>]/.test(character) ? "punctuation" : "text", character);
+            index += 1;
+          }
+          return fragment;
+        };
+
+        const renderCode = (source) => {
+          try {
+            const value = JSON.parse(source);
+            if (value !== null && typeof value === "object") return renderJson(source);
+          } catch {
+            // Shell commands can contain JSON fragments that are not standalone JSON.
+          }
+          if (/(^|\n)\s*(?:curl|export|npm|node)\b/m.test(source) || /(^|\n)\s+-{1,2}[A-Za-z]/m.test(source)) {
+            return renderShell(source);
+          }
+          return renderGeneric(source);
+        };
+
+        for (const code of document.querySelectorAll(".sample pre code")) {
+          const source = code.textContent;
+          code.replaceChildren(renderCode(source));
+        }
+        // Copy buttons + aria-live status region.
+        const statusRegion = document.getElementById("copy-status");
+        let statusTimer = 0;
+        const announce = (message) => {
+          statusRegion.textContent = message;
+          clearTimeout(statusTimer);
+          statusTimer = setTimeout(() => {
+            statusRegion.textContent = "";
+          }, 2400);
+        };
+
+        const restoreTimers = new WeakMap();
+        for (const button of document.querySelectorAll("button[data-copy]")) {
+          const pre = button.closest(".sample")?.querySelector("pre");
+          if (!pre) continue;
+          button.addEventListener("click", async () => {
+            try {
+              if (!navigator.clipboard || !navigator.clipboard.writeText) throw new Error("clipboard unavailable");
+              await navigator.clipboard.writeText(pre.textContent);
+            } catch {
+              clearTimeout(restoreTimers.get(button));
+              restoreTimers.delete(button);
+              button.textContent = "Copy";
+              announce("Select and copy the command.");
+              return;
+            }
+            button.textContent = "Copied";
+            announce("Copied");
+            clearTimeout(restoreTimers.get(button));
+            restoreTimers.set(
+              button,
+              setTimeout(() => {
+                button.textContent = "Copy";
+              }, 2000),
+            );
+          });
+        }
+
+        // Step navigation: aria-current + current-step line.
+        const links = Array.from(document.querySelectorAll(".step-link"));
+        const titles = links.map((link) => link.querySelector(".step-title").textContent);
+        const sections = links
+          .map((link) => document.getElementById(link.getAttribute("href").slice(1)))
+          .filter(Boolean);
+        const stepCurrent = document.getElementById("step-current");
+
+        const setActiveStep = (index) => {
+          links.forEach((link, i) => {
+            if (i === index) link.setAttribute("aria-current", "step");
+            else link.removeAttribute("aria-current");
+          });
+          stepCurrent.textContent = `Step ${index + 1} of 4: ${titles[index]}`;
+        };
+        setActiveStep(0);
+
+        links.forEach((link, index) => {
+          link.addEventListener("click", () => setActiveStep(index));
+        });
+
+        // Without IntersectionObserver, anchors still work and step 1 stays selected.
+        if ("IntersectionObserver" in window) {
+          const observer = new IntersectionObserver(
+            (entries) => {
+              for (const entry of entries) {
+                if (!entry.isIntersecting) continue;
+                const index = sections.indexOf(entry.target);
+                if (index !== -1) setActiveStep(index);
+              }
+            },
+            { rootMargin: "-45% 0px -50% 0px", threshold: 0 },
+          );
+          for (const section of sections) observer.observe(section);
+        }
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,13 @@
+# Exclude everything by default
+*
+
+# Allow source and build config
+!package.json
+!bun.lock
+!vite.config.ts
+!index.html
+!tsconfig.json
+!tailwind.config.js
+!postcss.config.js
+!src/
+!public/

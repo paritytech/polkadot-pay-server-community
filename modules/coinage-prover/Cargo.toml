@@ -1,0 +1,20 @@
+[package]
+name = "coinage-prover"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+
+# Standalone crate — do not inherit any parent workspace.
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+parity-scale-codec = { version = "3", features = ["derive"] }
+verifiable = { git = "https://github.com/paritytech/verifiable", rev = "1f9f67524acce0d9c46dbbb566f84ce52757b114", default-features = false, features = ["std", "prover"] }
+getrandom = { version = "0.2", features = ["js"] }
+
+[profile.release]
+opt-level = 3

@@ -1,0 +1,16 @@
+# Exclude everything by default
+*
+
+# Allow package manifests
+!package.json
+!bun.lock
+!drizzle.config.ts
+!tsconfig.json
+
+# Allow source, migrations, tests, CLI
+!src/
+!tests/
+!cli/
+
+# Allow .env.example only (exclude .env and .env.* variants)
+!.env.example
