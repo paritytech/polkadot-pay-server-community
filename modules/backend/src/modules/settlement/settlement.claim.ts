@@ -12,7 +12,7 @@ import {
   recordIncludedPaymentCoin,
   releasePaymentSettlement,
   removeIncludedPaymentCoin,
-  reopenSettledPayment,
+  reopenConfirmingPayment,
   touchPaymentSettlementLease,
 } from "../../modules/payments/payments.repo";
 import type { PaymentRecord } from "../../modules/payments/payments.types";
@@ -121,6 +121,14 @@ async function retryOrFail(
 
 export async function settlePaymentClaim(deps: ClaimDeps, payment: PaymentRecord): Promise<void> {
   const { db, chain } = deps;
+  if (payment.status === "settled" || payment.status === "failed") {
+    log.error({
+      event: "settlement_claim_skipped_terminal",
+      paymentId: payment.id,
+      status: payment.status,
+    });
+    return;
+  }
   const attempt = payment.claim_attempts + 1;
   if (!payment.coins_enc) {
     await failPaymentSettlement(db, payment.id, "no coins to settle");
@@ -191,6 +199,15 @@ export async function settlePaymentClaim(deps: ClaimDeps, payment: PaymentRecord
         await recordIncludedPaymentCoin(db, payment.id, chain.coinAddress(entry.coin), RECONCILED_COIN_MARKER);
       }
       const transferable = dispositions.filter((entry) => entry.disposition === "source").map((entry) => entry.coin);
+      const stale = await findPaymentByIdAnyMerchant(db, payment.id);
+      if (!stale || (stale.status !== "settling" && stale.status !== "confirming")) {
+        log.error({
+          event: "settlement_claim_aborted_stale",
+          paymentId: payment.id,
+          status: stale?.status ?? "not_found",
+        });
+        return;
+      }
       const results = await Promise.allSettled(
         transferable.map(async (coin) => {
           const coinAddress = chain.coinAddress(coin);
@@ -230,9 +247,27 @@ export async function settlePaymentClaim(deps: ClaimDeps, payment: PaymentRecord
                   reason,
                   removed,
                 });
-                if (!removed) return;
-                const reopened = await reopenSettledPayment(db, payment.id, reason);
-                if (!reopened) return;
+                if (!removed) {
+                  log.error({
+                    event: "settlement_drop_ignored_payment_settled",
+                    paymentId: payment.id,
+                    txHash,
+                    reason,
+                    note: "drop signal arrived after settlement; state was NOT reverted; operator should reconcile the coin on chain",
+                  });
+                  return;
+                }
+                const reopened = await reopenConfirmingPayment(db, payment.id, reason);
+                if (!reopened) {
+                  log.error({
+                    event: "settlement_drop_ignored_payment_settled",
+                    paymentId: payment.id,
+                    txHash,
+                    reason,
+                    note: "drop signal arrived after settlement; state was NOT reverted; operator should reconcile the coin on chain",
+                  });
+                  return;
+                }
                 await emitSettlementEvent(deps, payment.id, "payment.settling");
               });
             },

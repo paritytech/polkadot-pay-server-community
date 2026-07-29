@@ -143,26 +143,46 @@ export async function updatePaymentCompletion(
   return result.count === 1;
 }
 
+/**
+ * Compare-and-swap status transition: only applies when the row's current
+ * status is one of `expectedStatuses`. Returns false (no-op) when the row has
+ * already moved on — e.g. a concurrent settlement completed between the
+ * caller's snapshot read and this write.
+ */
 export async function updatePaymentStatus(
   db: Database,
   paymentId: string,
   status: PaymentStatus,
+  expectedStatuses: PaymentStatus[],
   timestampField: "completed_at" | "canceled_at" | null,
   timestamp: number | null,
-): Promise<void> {
+): Promise<boolean> {
   const updates = ["status = $2"];
   const parameters: Array<string | number | null> = [paymentId, status];
   if (timestampField) {
     updates.push(`${timestampField} = $3`);
     parameters.push(timestamp);
   }
-  await db.execute(`UPDATE payments SET ${updates.join(", ")} WHERE id = $1`, parameters);
+  const statusPlaceholders = expectedStatuses.map((_, index) => `$${parameters.length + index + 1}`);
+  parameters.push(...expectedStatuses);
+  const result = await db.execute(
+    `UPDATE payments SET ${updates.join(", ")} WHERE id = $1 AND status IN (${statusPlaceholders.join(", ")})`,
+    parameters,
+  );
+  return result.count === 1;
 }
 
 export async function updatePaymentAnomaly(db: Database, paymentId: string, anomaly: string): Promise<void> {
   await db.execute("UPDATE payments SET anomaly = $2 WHERE id = $1", [paymentId, anomaly]);
 }
 
+/**
+ * Flips a canceled payment back to `received` when a late cheque delivery
+ * completes it after cancellation. Guarded by `status = 'canceled'` so a
+ * duplicate delivery of the same cheque — the second of two racing this
+ * transition — cannot overwrite a payment the first delivery already moved
+ * past `received` (e.g. all the way to `settled`).
+ */
 export async function storeCanceledPaymentCoins(
   db: Database,
   paymentId: string,
@@ -173,14 +193,15 @@ export async function storeCanceledPaymentCoins(
     payer_timestamp_ms: number;
     anomaly: string;
   },
-): Promise<void> {
-  await db.execute(
+): Promise<boolean> {
+  const result = await db.execute(
     `UPDATE payments SET status = 'received', coins_enc = $2, coin_count = $3,
        paid_amount = $4, payer_timestamp_ms = $5, anomaly = $6,
-       privkey_enc = NULL WHERE id = $1`,
+       privkey_enc = NULL WHERE id = $1 AND status = 'canceled'`,
     [paymentId, values.coins_enc, values.coin_count, values.paid_amount, values.payer_timestamp_ms,
       values.anomaly],
   );
+  return result.count === 1;
 }
 
 export async function listPaymentsForListening(db: Database, now: number, lateWindowMs: number): Promise<PaymentRecord[]> {
@@ -321,15 +342,16 @@ export async function releasePaymentSettlement(db: Database, paymentId: string, 
 }
 
 /**
- * Drops a confirming or settled payment to settling when a best-block
- * inclusion is later dropped. This sanctioned reorg regression never falls
- * below the claim stage.
+ * A best-block inclusion drop may demote `confirming` back to `settling` so the
+ * aggregate confirmation gate is replayed. `settled` is a terminal state and is
+ * never reopened by this function — a late drop signal against an already-settled
+ * payment is an operator-reconciliation concern, not a state transition.
  */
-export async function reopenSettledPayment(db: Database, paymentId: string, error: string): Promise<boolean> {
+export async function reopenConfirmingPayment(db: Database, paymentId: string, error: string): Promise<boolean> {
   const result = await db.execute(
     `UPDATE payments SET status = 'settling', settling_since = NULL, claimed_at = NULL, completed_at = NULL,
        claim_attempts = claim_attempts + 1, claim_last_error = $2
-     WHERE id = $1 AND status IN ('confirming','settled')`,
+     WHERE id = $1 AND status = 'confirming'`,
     [paymentId, error],
   );
   return result.count === 1;
@@ -347,8 +369,9 @@ export async function failPaymentSettlement(db: Database, paymentId: string, err
 /**
  * Records that a coin's best-block inclusion was observed for the given txHash.
  * Idempotent — jsonb_set overwrites the address key with the supplied txHash.
- * Status predicate is broad enough to cover settling/confirming/settled races
- * between onIncluded events and concurrent drops/reopens.
+ * Status is restricted to settling/confirming: once a payment is settled its
+ * claim_included_coins are terminal, so this becomes a silent no-op for late
+ * onIncluded / timeout-reconciliation / purse-recovery callbacks.
  */
 export async function recordIncludedPaymentCoin(
   db: Database,
@@ -363,7 +386,7 @@ export async function recordIncludedPaymentCoin(
          to_jsonb($3::text),
          true
        )
-     WHERE id = $1 AND status IN ('settling','confirming','settled')`,
+     WHERE id = $1 AND status IN ('settling','confirming')`,
     [paymentId, coinAddress, txHash],
   );
 }
@@ -383,7 +406,7 @@ export async function removeIncludedPaymentCoin(
   const result = await db.execute(
     `UPDATE payments SET claim_included_coins = claim_included_coins - $2
      WHERE id = $1
-       AND status IN ('received','settling','confirming','settled')
+       AND status IN ('settling','confirming')
        AND claim_included_coins ? $2
        AND claim_included_coins ->> $2 = $3`,
     [paymentId, coinAddress, txHash],

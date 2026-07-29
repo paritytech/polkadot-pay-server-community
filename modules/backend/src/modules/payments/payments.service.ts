@@ -4,6 +4,7 @@ import { bytesToHex } from "@noble/hashes/utils.js";
 
 import type { MerchantRecord } from "../../types";
 import { appError } from "../../lib/errors";
+import { logger } from "../../lib/logger";
 import { seal } from "../../lib/crypto";
 import { buildPaymentProcessorDeeplink, MAX_AMOUNT, normalizeAmount } from "./v1/deeplink";
 import { paymentId } from "../../lib/ids";
@@ -18,6 +19,8 @@ import {
   updatePaymentStatus,
 } from "./payments.repo";
 import type { CreatePaymentInput, ListPaymentsInput, PaymentPublic, PaymentRecord } from "./payments.types";
+
+const log = logger.child({ component: "payments_service" });
 
 const DEFAULT_EXPIRES_IN_SECONDS = 900;
 const MIN_EXPIRES_IN_SECONDS = 60;
@@ -167,7 +170,8 @@ export class PaymentsService {
       const payment = await findPaymentById(transaction, merchantId, paymentIdValue);
       if (!payment) throw appError(404, "not_found_error", "payment_not_found", "Payment not found.");
       if (payment.status !== "pending") throw appError(400, "invalid_request_error", "payment_not_cancelable", "Only pending payments can be canceled.");
-      await updatePaymentStatus(transaction, payment.id, "canceled", "canceled_at", Date.now());
+      const transitioned = await updatePaymentStatus(transaction, payment.id, "canceled", ["pending"], "canceled_at", Date.now());
+      if (!transitioned) throw appError(400, "invalid_request_error", "payment_not_cancelable", "Only pending payments can be canceled.");
       const updated = await findPaymentById(transaction, merchantId, paymentIdValue);
       if (!updated) throw new Error("Canceled payment disappeared");
       await this.onPaymentEvent?.(transaction, "payment.canceled", toPaymentPublic(updated), updated);
@@ -181,7 +185,11 @@ export class PaymentsService {
       const payment = await findPaymentByIdAnyMerchant(transaction, paymentIdValue);
       if (!payment) throw appError(404, "not_found_error", "payment_not_found", "Payment not found.");
       if (payment.status !== "pending") return payment;
-      await updatePaymentStatus(transaction, payment.id, "expired", null, null);
+      const transitioned = await updatePaymentStatus(transaction, payment.id, "expired", ["pending"], null, null);
+      if (!transitioned) {
+        const current = await findPaymentByIdAnyMerchant(transaction, paymentIdValue);
+        return current ?? payment;
+      }
       const updated = await findPaymentByIdAnyMerchant(transaction, paymentIdValue);
       if (!updated) throw new Error("Expired payment disappeared");
       await this.onPaymentEvent?.(transaction, "payment.expired", toPaymentPublic(updated), updated);
@@ -234,8 +242,14 @@ export class PaymentsService {
     payment: PaymentRecord,
     payload: { amount: string; timestamp: bigint; coins: Uint8Array[] },
   ): Promise<PaymentRecord> {
-    await storeCanceledPaymentCoins(db, payment.id, { coins_enc: seal(coinSecretBytes(payload.coins)), coin_count: payload.coins.length,
+    const stored = await storeCanceledPaymentCoins(db, payment.id, { coins_enc: seal(coinSecretBytes(payload.coins)), coin_count: payload.coins.length,
       paid_amount: payload.amount, payer_timestamp_ms: Number(payload.timestamp), anomaly: "paid_after_cancel" });
+    if (!stored) {
+      log.warn({ event: "payment_cheque_duplicate_after_cancel_ignored", paymentId: payment.id });
+      const current = await findPaymentByIdAnyMerchant(db, payment.id);
+      if (!current) throw new Error("Canceled payment disappeared");
+      return current;
+    }
     const updated = await findPaymentByIdAnyMerchant(db, payment.id);
     if (!updated) throw new Error("Canceled payment disappeared");
     await this.onPaymentChanged?.(updated);

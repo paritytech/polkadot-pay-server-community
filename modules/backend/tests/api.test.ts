@@ -5,9 +5,9 @@ import { describe, expect, it } from "bun:test";
 import { createApp } from "../src/app.ts";
 import { EventsService } from "../src/modules/events/events.service.ts";
 import { createMerchantRecord } from "../src/modules/accounts/accounts.repo.ts";
-import { findPaymentById } from "../src/modules/payments/payments.repo.ts";
+import { findPaymentByIdAnyMerchant, findPaymentById, updatePaymentStatus } from "../src/modules/payments/payments.repo.ts";
 import { PaymentsService } from "../src/modules/payments/payments.service.ts";
-import { createTestDatabase } from "./helpers/payment-fixture.ts";
+import { createTestDatabase, seedMerchantWithKey } from "./helpers/payment-fixture.ts";
 
 async function jsonResponse(response: Response): Promise<unknown> {
   return response.json();
@@ -188,5 +188,63 @@ describe("API routes", () => {
     expect(firstReceived?.completed_at).toBeNull();
     expect(secondReceived?.received_at).not.toBeNull();
     expect(secondReceived?.completed_at).toBeNull();
+  });
+
+  it("updatePaymentStatus CAS is a no-op once the row has moved past the expected status", async () => {
+    const db = await createTestDatabase("cas_status_no_op");
+    const { merchant } = await seedMerchantWithKey(db);
+    const payments = new PaymentsService({ db });
+    const payment = await payments.createPayment(merchant, { amount: "4.00" });
+    const settledAt = Date.now();
+    await db.execute(
+      "UPDATE payments SET status = 'settled', completed_at = $2, claimed_at = $2 WHERE id = $1",
+      [payment.id, settledAt],
+    );
+
+    const transitioned = await updatePaymentStatus(db, payment.id, "canceled", ["pending"], "canceled_at", Date.now());
+
+    expect(transitioned).toBe(false);
+    const after = await findPaymentById(db, merchant.id, payment.id);
+    expect(after?.status).toBe("settled");
+    expect(after?.canceled_at).toBeNull();
+    expect(after?.completed_at).toBe(settledAt);
+  });
+
+  it("cancelPayment never overwrites a payment that settled before the cancel request", async () => {
+    const db = await createTestDatabase("cancel_settled_race");
+    const { merchant } = await seedMerchantWithKey(db);
+    const payments = new PaymentsService({ db });
+    const payment = await payments.createPayment(merchant, { amount: "4.00" });
+    const settledAt = Date.now();
+    await db.execute(
+      "UPDATE payments SET status = 'settled', completed_at = $2, claimed_at = $2 WHERE id = $1",
+      [payment.id, settledAt],
+    );
+
+    await expect(payments.cancelPayment(merchant.id, payment.id)).rejects.toThrow();
+
+    const after = await findPaymentById(db, merchant.id, payment.id);
+    expect(after?.status).toBe("settled");
+    expect(after?.canceled_at).toBeNull();
+    expect(after?.completed_at).toBe(settledAt);
+  });
+
+  it("expirePayment never overwrites a payment that settled before the expiry sweep", async () => {
+    const db = await createTestDatabase("expire_settled_race");
+    const { merchant } = await seedMerchantWithKey(db);
+    const payments = new PaymentsService({ db });
+    const payment = await payments.createPayment(merchant, { amount: "4.00" });
+    const settledAt = Date.now();
+    await db.execute(
+      "UPDATE payments SET status = 'settled', completed_at = $2, claimed_at = $2 WHERE id = $1",
+      [payment.id, settledAt],
+    );
+
+    const result = await payments.expirePayment(payment.id);
+    expect(result.status).toBe("settled");
+
+    const after = await findPaymentByIdAnyMerchant(db, payment.id);
+    expect(after?.status).toBe("settled");
+    expect(after?.completed_at).toBe(settledAt);
   });
 });

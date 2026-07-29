@@ -10,7 +10,10 @@ import {
   findPaymentByIdAnyMerchant,
   insertPayment,
   listUnclaimedPaymentsForSettlement,
+  markPaymentClaimed,
   reclaimStalePaymentSettlements,
+  recordIncludedPaymentCoin,
+  storeCanceledPaymentCoins,
   updatePaymentCompletion,
 } from "../src/modules/payments/payments.repo.ts";
 import type { PaymentRecord } from "../src/modules/payments/payments.types.ts";
@@ -59,6 +62,7 @@ interface FakeChainOptions {
   includedHoldFor?: (coinSecret: Uint8Array) => Promise<void> | undefined;
   captureHooks?: (hooks: TransferCoinHooks, txHash: string) => void;
   dispositionFor?: (coinSecret: Uint8Array) => CoinDisposition;
+  dispositionHold?: Promise<void>;
 }
 
 class FakeSettlementChain implements SettlementChain {
@@ -73,6 +77,7 @@ class FakeSettlementChain implements SettlementChain {
   includedCount = 0;
   private readonly submittedFiredDeferreds: Deferred[] = [];
   private readonly includedFiredDeferreds: Deferred[] = [];
+  private readonly dispositionCalledDeferreds: Deferred[] = [];
 
   constructor(private readonly options: FakeChainOptions = {}) {}
 
@@ -154,8 +159,24 @@ class FakeSettlementChain implements SettlementChain {
     throw new Error("coinPresent must not be invoked by the claim path");
   }
 
+  waitForDispositionCall(callNumber: number): Promise<void> {
+    let deferred = this.dispositionCalledDeferreds[callNumber - 1];
+    if (!deferred) {
+      let resolve!: () => void;
+      const promise = new Promise<void>((r) => {
+        resolve = r;
+      });
+      deferred = { promise, resolve };
+      this.dispositionCalledDeferreds[callNumber - 1] = deferred;
+    }
+    return deferred.promise;
+  }
+
   async coinDisposition(coinSecret: Uint8Array): Promise<CoinDisposition> {
+    const index = this.coinDispositionCalls;
     this.coinDispositionCalls += 1;
+    this.dispositionCalledDeferreds[index]?.resolve();
+    if (this.options.dispositionHold) await this.options.dispositionHold;
     return this.options.dispositionFor?.(coinSecret) ?? "source";
   }
 
@@ -669,7 +690,7 @@ describe("SettlementWorker state machine", () => {
     expect(afterFinality?.claimed_at).toBe(settledState!.claimed_at);
   });
 
-  it("reopens a settled payment whose included transfer was later dropped", async () => {
+  it("ignores a drop signal after settlement and never reverts the payment", async () => {
     const db = await createTestDatabase("settle_dropped_after_inclusion");
     const { merchant } = await seedMerchantWithKey(db);
     const coins = [makeCoinSecret(97)];
@@ -686,20 +707,25 @@ describe("SettlementWorker state machine", () => {
     });
 
     await worker.tick();
-    expect((await findPaymentByIdAnyMerchant(db, payment.id))?.status).toBe("settled");
+    const settledState = await findPaymentByIdAnyMerchant(db, payment.id);
+    expect(settledState?.status).toBe("settled");
+    const claimedAt = settledState?.claimed_at;
+    const completedAt = settledState?.completed_at;
+    const claimTxHash = settledState?.claim_tx_hash;
+    const includedSnapshot = { ...settledState?.claim_included_coins };
 
-    await captured[0]?.onDropped?.(Object.values((await findPaymentByIdAnyMerchant(db, payment.id))!.claim_included_coins)[0], "reorged out");
+    const eventsBeforeDrop = events.length;
+    const droppedTxHash = Object.values(settledState!.claim_included_coins)[0];
+    await captured[0]?.onDropped?.(droppedTxHash, "reorged out");
 
-    const reopened = await findPaymentByIdAnyMerchant(db, payment.id);
-    expect(reopened?.status).toBe("settling");
-    expect(reopened?.claimed_at).toBeNull();
-    expect(reopened?.settling_since).toBeNull();
-    expect(reopened?.claim_attempts).toBe(1);
-    expect(reopened?.claim_last_error).toBe("reorged out");
-    expect(events).toContain("payment.settling");
-
-    await worker.tick();
-    expect((await findPaymentByIdAnyMerchant(db, payment.id))?.status).toBe("settled");
+    const afterDrop = await findPaymentByIdAnyMerchant(db, payment.id);
+    expect(afterDrop?.status).toBe("settled");
+    expect(afterDrop?.claimed_at).toBe(claimedAt);
+    expect(afterDrop?.completed_at).toBe(completedAt);
+    expect(afterDrop?.claim_tx_hash).toBe(claimTxHash);
+    expect(afterDrop?.settling_since).toBeNull();
+    expect(afterDrop?.claim_included_coins).toEqual(includedSnapshot);
+    expect(events.length).toBe(eventsBeforeDrop);
   });
 
   it("heartbeats the lease on a timer so a long-running claim is never reclaimed", async () => {
@@ -1054,5 +1080,117 @@ describe("SettlementWorker state machine", () => {
       [addressA]: "0x" + Array.from(coinA.slice(0, 16)).map((b) => b.toString(16).padStart(2, "0")).join(""),
       [addressB]: "0x" + Array.from(coinB.slice(0, 16)).map((b) => b.toString(16).padStart(2, "0")).join(""),
     });
+  });
+  it("does not re-claim or re-lease a payment that is already settled", async () => {
+    const db = await createTestDatabase("settle_already_settled_no_reclaim");
+    const { merchant } = await seedMerchantWithKey(db);
+    const coins = [makeCoinSecret(127)];
+    const payment = await insertCompletedPayment(db, merchant.id, seal(concat(coins)), coins.length, "5.00");
+
+    const claimChain = new FakeSettlementChain();
+    const claimWorker = createSettlementWorker(db, { queue: inlineQueue(db, claimChain, 5), leaseMs: 60_000 });
+    await claimWorker.tick();
+    const settledState = await findPaymentByIdAnyMerchant(db, payment.id);
+    expect(settledState?.status).toBe("settled");
+    const claimedAt = settledState?.claimed_at;
+    const completedAt = settledState?.completed_at;
+    const claimTxHash = settledState?.claim_tx_hash;
+    const includedSnapshot = { ...settledState?.claim_included_coins };
+
+    const reClaimChain = new FakeSettlementChain();
+    await claimPaymentById({ db, chain: reClaimChain, maxAttempts: 5, leaseHeartbeatMs: 30_000 }, payment.id);
+    expect(reClaimChain.callCount).toBe(0);
+
+    const pollChain = new FakeSettlementChain();
+    const pollWorker = createSettlementWorker(db, { queue: inlineQueue(db, pollChain, 5), leaseMs: 60_000 });
+    await pollWorker.tick();
+    expect(pollChain.callCount).toBe(0);
+
+    const finalState = await findPaymentByIdAnyMerchant(db, payment.id);
+    expect(finalState?.status).toBe("settled");
+    expect(finalState?.claimed_at).toBe(claimedAt);
+    expect(finalState?.completed_at).toBe(completedAt);
+    expect(finalState?.claim_tx_hash).toBe(claimTxHash);
+    expect(finalState?.claim_included_coins).toEqual(includedSnapshot);
+  });
+
+  it("recordIncludedPaymentCoin is a no-op once a payment has settled", async () => {
+    const db = await createTestDatabase("record_included_settled_no_op");
+    const { merchant } = await seedMerchantWithKey(db);
+    const coins = [makeCoinSecret(139)];
+    const payment = await insertCompletedPayment(db, merchant.id, seal(concat(coins)), coins.length, "5.00");
+
+    const chain = new FakeSettlementChain();
+    const worker = createSettlementWorker(db, { queue: inlineQueue(db, chain, 5), leaseMs: 60_000 });
+    await worker.tick();
+    const settledState = await findPaymentByIdAnyMerchant(db, payment.id);
+    expect(settledState?.status).toBe("settled");
+    const includedSnapshot = { ...settledState?.claim_included_coins };
+
+    const coinAddress = chain.coinAddress(coins[0]);
+    await recordIncludedPaymentCoin(db, payment.id, coinAddress, "0xlate-oninclusion");
+
+    const after = await findPaymentByIdAnyMerchant(db, payment.id);
+    expect(after?.status).toBe("settled");
+    expect(after?.claim_included_coins).toEqual(includedSnapshot);
+  });
+
+  it("storeCanceledPaymentCoins is a no-op once a payment has settled", async () => {
+    const db = await createTestDatabase("store_canceled_coins_settled_no_op");
+    const { merchant } = await seedMerchantWithKey(db);
+    const coins = [makeCoinSecret(149)];
+    const payment = await insertCompletedPayment(db, merchant.id, seal(concat(coins)), coins.length, "5.00");
+
+    const chain = new FakeSettlementChain();
+    const worker = createSettlementWorker(db, { queue: inlineQueue(db, chain, 5), leaseMs: 60_000 });
+    await worker.tick();
+    const settledState = await findPaymentByIdAnyMerchant(db, payment.id);
+    expect(settledState?.status).toBe("settled");
+
+    const stored = await storeCanceledPaymentCoins(db, payment.id, {
+      coins_enc: seal(concat([makeCoinSecret(200)])),
+      coin_count: 1,
+      paid_amount: "999.00",
+      payer_timestamp_ms: Date.now(),
+      anomaly: "duplicate_cheque_after_cancel",
+    });
+
+    expect(stored).toBe(false);
+    const after = await findPaymentByIdAnyMerchant(db, payment.id);
+    expect(after?.status).toBe("settled");
+    expect(after?.coins_enc).toBe(settledState?.coins_enc);
+    expect(after?.paid_amount).toBe(settledState?.paid_amount);
+  });
+
+  it("aborts the transfer submission when the payment settled during the coin-detect poll (stale-worker fence)", async () => {
+    const db = await createTestDatabase("settle_stale_worker_fence");
+    const { merchant } = await seedMerchantWithKey(db);
+    const coins = [makeCoinSecret(131)];
+    const payment = await insertCompletedPayment(db, merchant.id, seal(concat(coins)), coins.length, "5.00");
+
+    const dispositionGate = Promise.withResolvers<void>();
+    const staleChain = new FakeSettlementChain({ dispositionHold: dispositionGate.promise });
+    const worker = createSettlementWorker(db, { queue: inlineQueue(db, staleChain, 5), leaseMs: 60_000 });
+
+    const stalePromise = worker.tick();
+    await staleChain.waitForDispositionCall(1);
+
+    const coinAddress = staleChain.coinAddress(coins[0]);
+    const otherWorkerTxHash = "0xother-worker-settled-it";
+    await recordIncludedPaymentCoin(db, payment.id, coinAddress, otherWorkerTxHash);
+    const claimed = await markPaymentClaimed(db, payment.id, otherWorkerTxHash, Date.now());
+    expect(claimed).toBe(true);
+    const settledByOther = await findPaymentByIdAnyMerchant(db, payment.id);
+    expect(settledByOther?.status).toBe("settled");
+
+    dispositionGate.resolve();
+    await stalePromise;
+
+    expect(staleChain.callCount).toBe(0);
+    expect(staleChain.received).toHaveLength(0);
+    const finalState = await findPaymentByIdAnyMerchant(db, payment.id);
+    expect(finalState?.status).toBe("settled");
+    expect(finalState?.claim_tx_hash).toBe(otherWorkerTxHash);
+    expect(finalState?.claim_included_coins).toEqual({ [coinAddress]: otherWorkerTxHash });
   });
 });
