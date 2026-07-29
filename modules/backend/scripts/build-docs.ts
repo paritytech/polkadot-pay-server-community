@@ -48,7 +48,7 @@ const guide = guideSource
   .replaceAll('href="/docs/reference"', 'href="./reference/"')
   .replaceAll('href="/openapi.json"', 'href="./openapi.json"')
   .replaceAll('href="/docs"', 'href="./"')
-  .replace(/<a([^>]*?)href="\/dashboard"([^>]*)>(.*?)<\/a>/gs, '<span$1$2 title="Dashboard is not available on the static documentation site">Dashboard unavailable on this site</span>');
+  .replace(/<a[^>]*?href="\/dashboard"[^>]*>.*?<\/a>/gs, "");
 
 const reference = `<!doctype html>
 <html lang="en">
