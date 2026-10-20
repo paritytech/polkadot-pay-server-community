@@ -952,8 +952,8 @@ packages:
     peerDependencies:
       seroval: ^1.0
 
-  seroval@1.5.6:
-    resolution: {integrity: sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==}
+  seroval@1.6.11:
+    resolution: {integrity: sha512-hpb6XnMCGN/A+79Uf8V7/iTGkyyyazNn5X0CoCAp7Uy9vT3RT8jZ9GLcnxGoVjg3P8AArbe4ZVHq6C8oT2a0kA==}
     engines: {node: '>=10'}
 
   source-map-js@1.2.1:
@@ -1442,8 +1442,8 @@ snapshots:
     dependencies:
       '@tanstack/history': 1.162.0
       cookie-es: 3.1.1
-      seroval: 1.5.6
-      seroval-plugins: 1.5.6(seroval@1.5.6)
+      seroval: 1.6.11
+      seroval-plugins: 1.5.6(seroval@1.6.11)
 
   '@tanstack/router-generator@1.167.21':
     dependencies:
@@ -1894,11 +1894,11 @@ snapshots:
 
   semver@6.3.1: {}
 
-  seroval-plugins@1.5.6(seroval@1.5.6):
+  seroval-plugins@1.5.6(seroval@1.6.11):
     dependencies:
-      seroval: 1.5.6
+      seroval: 1.6.11
 
-  seroval@1.5.6: {}
+  seroval@1.6.11: {}
 
   source-map-js@1.2.1: {}
 
